@@ -1,0 +1,37 @@
+/*
+ * @NOTE: Prepend a `~` to css file paths that are in your node_modules
+ *        See https://github.com/webpack-contrib/sass-loader#imports
+ */
+
+@use '@carbon/react';
+
+.server_status {
+  &__green {
+    background-color: #7b9d67;
+    &__selected {
+      background-color: #4b5d37
+    }
+  }
+}
+
+.cds--header-panel--expanded {
+  width: 25rem !important;
+}
+
+@media (min-width: 56rem) {
+  .cds--header__nav {
+    display: block;
+  }
+
+  .cds--header__menu-toggle__hidden {
+    display: none;
+  }
+}
+
+.fullwidth-stretch {
+  align-self: stretch !important;
+
+  textarea {
+    width: 100%;
+  }
+}

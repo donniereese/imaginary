@@ -8,12 +8,15 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
-import path from 'path';
-import { app, BrowserWindow, shell, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
-import log from 'electron-log';
-import MenuBuilder from './menu';
-import { resolveHtmlPath } from './util';
+import path from 'path'
+import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { autoUpdater } from 'electron-updater'
+import log from 'electron-log'
+import MenuBuilder from './menu'
+import { resolveHtmlPath } from './util'
+import * as expressServer from '../server'
+import * as hostsManager from '../hosts'
+import * as ipcEventManager from './ipc-events'
 
 class AppUpdater {
   constructor() {
@@ -23,13 +26,36 @@ class AppUpdater {
   }
 }
 
-let mainWindow: BrowserWindow | null = null;
+let isVerbose: boolean                = false
+let windowReady: boolean              = false
+let mainWindow: BrowserWindow | null  = null
+let server                            = null
+let hosts                             = null
+let ipcEvents                         = null
 
-ipcMain.on('ipc-example', async (event, arg) => {
-  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`;
-  console.log(msgTemplate(arg));
-  event.reply('ipc-example', msgTemplate('pong'));
-});
+const ipcExample = async (event, arg) => {
+  const msgTemplate = (pingPong: string) => `IPC test: ${pingPong}`
+  console.log('msgTemplate: ', msgTemplate(arg))
+  event.reply('ipc-example', msgTemplate('pong'))
+}
+
+const addEndpointEvent = async (event, payload) => {
+  console.log('addEndpointEvent() ', event, '\n', payload)
+
+  if (!server.addRoute(payload[1])) {
+    console.log('error in addRoute from main.ts')
+    return;
+  }
+}
+
+const addHostEvent = (topic, payload) => {
+  console.log('Event: ', topic, '\n', payload)
+}
+
+const sendMessage = (topic = 'log-message', payload) => {
+  if (!windowReady) throw new Error('Main Window not ready')
+    mainWindow?.webContents.send(topic, payload)
+}
 
 if (process.env.NODE_ENV === 'production') {
   const sourceMapSupport = require('source-map-support');
@@ -55,6 +81,41 @@ const installExtensions = async () => {
     )
     .catch(console.log);
 };
+
+const serverEventReady = () => {
+  if (!windowReady) throw new Error('MainWindow not ready')
+  mainWindow?.webContents.send('server-event', 'ready')
+}
+
+const createServer = () => {
+  server = expressServer
+  server.isVerbose(true)
+  server.createServer({
+    events: {
+      'ready': () => serverEventReady(),
+    },
+    ipc: sendMessage
+  })
+}
+
+const init = () => {
+  hosts = hostsManager
+  hosts.init({
+    ipc: sendMessage
+  })
+
+  ipcEvents = ipcEventManager
+  ipcEvents.init({
+    ipc: ipcMain,
+    topics: [
+      { topic: 'add-host',      handler: async (t, p) => addHostEvent(t, p) },
+      { topic: 'add-endpoint',  handler: async (t, p) => addEndpointEvent(t, p) },
+      { topc: 'ipc-example',    handler: async (t, p) => ipcExample(t, p) },
+    ]
+  })
+
+  createServer()
+}
 
 const createWindow = async () => {
   if (isDebug) {
@@ -92,6 +153,9 @@ const createWindow = async () => {
     } else {
       mainWindow.show();
     }
+
+    windowReady = true;
+    app.emit('available')
   });
 
   mainWindow.on('closed', () => {
@@ -123,6 +187,8 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+app.on('available', () => init())
 
 app
   .whenReady()

@@ -8,6 +8,7 @@ const electronHandler = {
       ipcRenderer.send(channel, args);
     },
     on(channel: Channels, func: (...args: unknown[]) => void) {
+      console.log('Preload() ipcRenderer>on: ', channel)
       const subscription = (_event: IpcRendererEvent, ...args: unknown[]) =>
         func(...args);
       ipcRenderer.on(channel, subscription);
